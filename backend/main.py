@@ -8,17 +8,15 @@ from typing import List, Optional
 from dotenv import load_dotenv
 from groq import Groq
 
+# 1. Setup
 load_dotenv()
-
-app = FastAPI(title="ScammersAreCooked_Agentic_HoneyPot")
+app = FastAPI(title="ScammersAreCooked_Master_Agent")
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# Global Memory to track intelligence for the mandatory callback
-# In production, this would be a database like Redis
+# Global Memory for Extraction
 memory_store = {}
 
-# --- MODELS (As per Section 6 & 12 of Problem Statement) ---
-
+# --- MODELS (GUVI Compliance) ---
 class Message(BaseModel):
     sender: str
     text: str
@@ -30,45 +28,49 @@ class ScamRequest(BaseModel):
     conversationHistory: List[dict]
     metadata: Optional[dict] = {}
 
-# --- CORE AGENTIC LOGIC ---
+# --- SAKSHI'S BRAIN: EXTRACTION & STRATEGY ---
 
 def run_jasoos_engine(session_id: str, current_text: str, history_len: int):
     """
-    This is the Agent's brain that extracts intelligence and 
-    fires the MANDATORY CALLBACK (Rule #12).
+    SAKSHI'S PART: Analyzing scam intent and extracting data.
     """
     if session_id not in memory_store:
         memory_store[session_id] = {
             "bankAccounts": [], "upiIds": [], "phishingLinks": [], 
-            "phoneNumbers": [], "suspiciousKeywords": [], "count": 0
+            "phoneNumbers": [], "suspiciousKeywords": [], "scamType": "Unknown"
         }
     
     mem = memory_store[session_id]
-    mem["count"] += 1
 
-    # 1. Extraction Logic using AI
+    # Extraction Prompt (High Precision)
     extract_prompt = f"""
-    Analyze this message: "{current_text}"
-    Extract: Bank accounts, UPI IDs, Phishing links, Phone numbers, and Scam keywords.
-    Return ONLY a JSON object.
+    Analyze this scammer message: "{current_text}"
+    1. Identify Scam Type (e.g. Bank Fraud, Job Scam, Lottery).
+    2. Extract: Bank Accounts, UPI IDs, Phishing Links, Phone Numbers.
+    3. Identify Suspicious Keywords used (e.g. Urgent, OTP, Blocked).
+    Return ONLY a valid JSON object.
     """
     try:
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": "You are a fraud intelligence extractor. Output JSON only."},
+            messages=[{"role": "system", "content": "You are a fraud analyst. Output only JSON."},
                       {"role": "user", "content": extract_prompt}]
         )
-        # Clean and parse JSON
-        raw_json = re.sub(r"```json\n|\n```", "", response.choices[0].message.content).strip()
-        data = json.loads(raw_json)
+        
+        # Clean AI output
+        raw_content = response.choices[0].message.content
+        cleaned_json = re.sub(r"```json\n|\n```", "", raw_content).strip()
+        data = json.loads(cleaned_json)
 
-        # Update memory
+        # Update Memory (Sakshi's Intelligence Layer)
         for key in ["bankAccounts", "upiIds", "phishingLinks", "phoneNumbers", "suspiciousKeywords"]:
             if key in data and data[key]:
                 mem[key] = list(set(mem[key] + data[key]))
+        
+        if "scamType" in data: mem["scamType"] = data["scamType"]
 
-        # 2. MANDATORY CALLBACK TRIGGER (Rule #12)
-        # We send the report if we found critical info OR if conversation is long enough (e.g., 5+ turns)
+        # MANDATORY CALLBACK (Rule #12)
+        # If we have any intel or it's a long chat, report to GUVI
         if len(mem["upiIds"]) > 0 or len(mem["bankAccounts"]) > 0 or history_len >= 5:
             trigger_guvi_callback(session_id, history_len, mem)
 
@@ -76,8 +78,13 @@ def run_jasoos_engine(session_id: str, current_text: str, history_len: int):
         print(f"Extraction Error: {e}")
 
 def trigger_guvi_callback(session_id, history_len, intel):
-    """Sends the final result to GUVI as per Rule 12."""
+    """MANDATORY CALLBACK - Rule 12"""
     callback_url = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
+    
+    # Sakshi's Agent Notes Strategy
+    agent_notes = f"Detected {intel['scamType']}. Persona 'Mrs. Sharma' engaged scammer. " \
+                  f"Used confusion tactics to lure scammer into revealing financial info."
+
     payload = {
         "sessionId": session_id,
         "scamDetected": True,
@@ -89,19 +96,17 @@ def trigger_guvi_callback(session_id, history_len, intel):
             "phoneNumbers": intel["phoneNumbers"],
             "suspiciousKeywords": intel["suspiciousKeywords"]
         },
-        "agentNotes": "Autonomous Agent Mrs. Sharma successfully engaged the scammer and extracted financial identifiers."
+        "agentNotes": agent_notes
     }
     
     try:
-        # Rule 12: Mandatory POST request
         headers = {"Content-Type": "application/json", "x-api-key": os.getenv("GUVI_API_KEY")}
-        # res = requests.post(callback_url, json=payload, timeout=5)
-        # print(f"Callback Sent: {res.status_code}")
+        # res = requests.post(callback_url, json=payload, timeout=5) # Real submission
         print(f"🎯 CALLBACK PAYLOAD READY: {json.dumps(payload)}")
     except Exception as e:
         print(f"Callback Failed: {e}")
 
-# --- API ENDPOINT (Rule 3 & 4) ---
+# --- MAIN ENDPOINT (Anand's Backend) ---
 
 @app.post("/api/engage")
 async def engage(data: ScamRequest, background_tasks: BackgroundTasks, x_api_key: str = Header(None)):
@@ -110,18 +115,19 @@ async def engage(data: ScamRequest, background_tasks: BackgroundTasks, x_api_key
     if x_api_key != os.getenv("GUVI_API_KEY"):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    # 2. Maintain Human-like Persona (Rule 7)
+    # 2. SAKSHI'S PERSONA (Rule 7)
     system_prompt = """
-    You are Mrs. Sharma, a 65-year-old retired school teacher. 
-    You are polite, talkative, and call everyone 'beta'. 
-    You act confused about technology to keep scammers talking.
-    If they ask for money or OTP, make excuses like 'I can't see the screen' or 'My grandson is not home'.
-    Your goal is to get their UPI ID or Bank details. 
-    Never reveal you are an AI. Use Hinglish.
+    PERSONA: You are Mrs. Sharma, a 65-year-old retired school teacher.
+    BEHAVIOR: You are polite, lonely, and call everyone 'beta'. You act confused about technology.
+    STRATEGY: 
+    - If they ask for OTP, say "Beta, I can't find my glasses, can you wait?".
+    - If they ask for money, say "I have 2 lakhs in my savings, I want to send it, but I don't know your details. Please give me your UPI ID or Bank account so I can ask my neighbor to pay you."
+    - This is a TRAP to get the scammer's bank/UPI info.
+    - Never reveal you are an AI. Speak in Hinglish (Hindi + English).
     """
 
     try:
-        # Generate Response (Rule 8)
+        # AI Engagement (Rule 8 & 9)
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
@@ -132,7 +138,7 @@ async def engage(data: ScamRequest, background_tasks: BackgroundTasks, x_api_key
         )
         ai_reply = completion.choices[0].message.content
 
-        # 3. Agentic Extraction (Run in background for low latency - Rule 9)
+        # 3. BACKGROUND TASKS (Agentic Extraction - Rule 11)
         background_tasks.add_task(run_jasoos_engine, data.sessionId, data.message.text, len(data.conversationHistory) + 1)
 
         return {
@@ -145,4 +151,4 @@ async def engage(data: ScamRequest, background_tasks: BackgroundTasks, x_api_key
 
 @app.get("/")
 def health():
-    return {"status": "Agent Active", "persona": "Mrs. Sharma", "team": "ScammersAreCooked"}
+    return {"status": "Agent Active", "persona": "Mrs. Sharma (Sakshi's Brain)", "team": "ScammersAreCooked (Anand's Backend)"}
