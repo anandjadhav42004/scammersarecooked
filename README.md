@@ -8,6 +8,9 @@
 **ScammersAreCooked** is a next-generation AI-driven Agentic Honey-Pot designed to fight India's rising fraud crisis. Our system doesn't just block scammers—it **wastes their time** and **extracts their secrets**.
 
 ---
+🌐 Live API Endpoint: https://scammersarecooked.onrender.com/api/engage
+🔑 API Key: SCAMMERS_ARE_COOKED_SECRET
+
 
 ## 🎯 The Concept: "The Bholi Dadi Strategy" 👵
 Most AI systems are designed to be helpful. Ours is designed to be **deceptive**. 
